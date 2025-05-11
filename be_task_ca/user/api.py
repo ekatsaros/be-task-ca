@@ -1,32 +1,39 @@
 from uuid import UUID
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.orm import Session
-
-from ..common import get_db
-
-from .usecases import add_item_to_cart, create_user, list_items_in_cart
-
-from .schema import AddToCartRequest, CreateUserRequest
-
-
-user_router = APIRouter(
-    prefix="/users",
-    tags=["user"],
+from fastapi import APIRouter, HTTPException
+from .usecases import UserUseCases
+from .infrastructure.repositories import InMemoryUserRepository
+from .schemas import (
+    CreateUserRequest,
+    CreateUserResponse,
+    AddToCartRequest,
+    AddToCartResponse,
 )
 
+# Initialize router
+user_router = APIRouter(prefix="/users", tags=["users"])
 
-@user_router.post("/")
-async def post_customer(user: CreateUserRequest, db: Session = Depends(get_db)):
-    return create_user(user, db)
+# Initialize repository and use cases
+repository = InMemoryUserRepository()
+use_cases = UserUseCases(repository)
+
+
+@user_router.post("/", response_model=CreateUserResponse)
+async def create_user(request: CreateUserRequest) -> CreateUserResponse:
+    """Create a new user"""
+    try:
+        return await use_cases.create_user(request)
+    except Exception as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @user_router.post("/{user_id}/cart")
-async def post_cart(
-    user_id: UUID, cart_item: AddToCartRequest, db: Session = Depends(get_db)
-):
-    return add_item_to_cart(user_id, cart_item, db)
+async def add_to_cart(user_id: UUID, request: AddToCartRequest) -> AddToCartResponse:
+    """Add item to user's cart"""
+    return await use_cases.add_to_cart(user_id, request)
 
 
-@user_router.get("/{user_id}/cart")
-async def get_cart(user_id: UUID, db: Session = Depends(get_db)):
-    return list_items_in_cart(user_id, db)
+
+@user_router.get("/{user_id}/cart", response_model=AddToCartResponse)
+async def get_cart(user_id: UUID) -> AddToCartResponse:
+    """Get user's cart items"""
+    return await use_cases.get_cart(user_id)

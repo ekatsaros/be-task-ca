@@ -1,87 +1,98 @@
-import hashlib
+import datetime
+from uuid import UUID
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
-
-from ..item.domain.models import Item
-
-from ..item.infrastructure.repositories import InMemoryItemRepository
-
-item_repository = InMemoryItemRepository()
-
-from .model import CartItem, User
-
-from .repository import (
-    find_cart_items_for_user_id,
-    find_user_by_email,
-    find_user_by_id,
-    save_user,
-)
-from .schema import (
-    AddToCartRequest,
-    AddToCartResponse,
+from .domain.models import User, CartItem
+from .domain.exceptions import UserNotFoundError, UserAlreadyExistsError
+from .interfaces.repositories import UserRepository
+from .schemas import (
     CreateUserRequest,
     CreateUserResponse,
+    AddToCartRequest,
+    AddToCartResponse,
 )
 
 
-def create_user(create_user: CreateUserRequest, db: Session) -> CreateUserResponse:
-    search_result = find_user_by_email(create_user.email, db)
-    if search_result is not None:
-        raise HTTPException(
-            status_code=409, detail="An user with this email adress already exists"
-        )
+class UserUseCases:
+    def __init__(self, repository: UserRepository):
+        self._repository = repository
 
-    new_user = User(
-        first_name=create_user.first_name,
-        last_name=create_user.last_name,
-        email=create_user.email,
-        hashed_password=hashlib.sha512(
-            create_user.password.encode("UTF-8")
-        ).hexdigest(),
-        shipping_address=create_user.shipping_address,
-    )
+    async def create_user(self, request: CreateUserRequest) -> CreateUserResponse:
+        """Create a new user"""
+        try:
+            # Check if user exists
+            if await self._repository.find_user_by_email(request.email):
+                raise UserAlreadyExistsError(f"Email '{request.email}' already registered")
 
-    save_user(new_user, db)
+            # Create user
+            user = User(
+                email=request.email,
+                first_name=request.first_name,
+                last_name=request.last_name,
+                hashed_password=request.password,  # In a real app, hash the password
+                shipping_address=request.shipping_address
+            )
 
-    return CreateUserResponse(
-        id=new_user.id,
-        first_name=new_user.first_name,
-        last_name=new_user.last_name,
-        email=new_user.email,
-        shipping_address=new_user.shipping_address,
-    )
+            created_user = await self._repository.save_user(user)
 
+            return CreateUserResponse(
+                id=created_user.id,
+                email=created_user.email,
+                first_name=created_user.first_name,
+                last_name=created_user.last_name,
+                shipping_address=created_user.shipping_address,
+                created_at=datetime.datetime.now()  # Assuming created_at is the current date
+            )
 
-def add_item_to_cart(user_id: int, cart_item: AddToCartRequest, db: Session) -> AddToCartResponse:
-    user: User = find_user_by_id(user_id, db)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User does not exist")
+        except UserAlreadyExistsError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
-    item: Item = item_repository.find_item_by_id(cart_item.item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Item does not exist")
-    if item.quantity < cart_item.quantity:
-        raise HTTPException(status_code=409, detail="Not enough items in stock")
+    async def add_to_cart(self, user_id: UUID, request: AddToCartRequest) -> AddToCartResponse:
+        """Add item to user's cart"""
+        try:
+            user = await self._repository.find_user_by_id(user_id)
+            if not user:
+                raise UserNotFoundError(f"User with id {user_id} not found")
 
-    item_ids = [o.item_id for o in user.cart_items]
-    if cart_item.item_id in item_ids:
-        raise HTTPException(status_code=409, detail="Item already in cart")
+            cart_item = user.add_to_cart(
+                item_id=request.item_id,
+                quantity=request.quantity
+            )
+            user.cart_items.append(cart_item)
 
-    new_cart_item: CartItem = CartItem(
-        user_id=user.id, item_id=cart_item.item_id, quantity=cart_item.quantity
-    )
+            return AddToCartResponse(
+                user_id=user_id,
+                items=[
+                    AddToCartRequest(
+                        item_id=item.item_id,
+                        quantity=item.quantity
+                    ) for item in user.cart_items
+                ]
+            )
+        except UserNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
-    user.cart_items.append(new_cart_item)
+    async def get_cart(self, user_id: UUID) -> AddToCartResponse:
+        """Get user's cart"""
+        try:
+            user = await self._repository.find_user_by_id(user_id)
+            if not user:
+                raise UserNotFoundError(f"User with id {user_id} not found")
 
-    save_user(user, db)
+            return AddToCartResponse(
+                user_id=user_id,
+                items=[
+                    AddToCartRequest(
+                        item_id=item.item_id,
+                        quantity=item.quantity
+                    ) for item in user.cart_items
+                ]
+            )
 
-    return list_items_in_cart(user.id, db)
-
-
-def list_items_in_cart(user_id, db):
-    cart_items = find_cart_items_for_user_id(user_id, db)
-    return AddToCartResponse(items=list(map(cart_item_model_to_schema, cart_items)))
-
-
-def cart_item_model_to_schema(model: CartItem):
-    return AddToCartRequest(item_id=model.item_id, quantity=model.quantity)
+        except UserNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
