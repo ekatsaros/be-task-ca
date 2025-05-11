@@ -28,7 +28,6 @@ class ItemUseCases:
                 'description': created_item.description,
                 'price': created_item.price,
                 'quantity': created_item.quantity,
-                'created_at': created_item.created_at
             })
 
         except ItemAlreadyExistsError as e:
@@ -43,6 +42,5 @@ class ItemUseCases:
                 'description': item.description,
                 'price': item.price,
                 'quantity': item.quantity,
-                'created_at': item.created_at
             }) for item in items]
         )
