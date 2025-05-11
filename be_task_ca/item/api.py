@@ -1,26 +1,20 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter
+from .schemas import CreateItemResponse, AllItemsResponse, CreateItemRequest
+from .infrastructure.repositories import InMemoryItemRepository
+from .usecases import ItemUseCases
 
-from .usecases import create_item, get_all
+item_router = APIRouter(prefix="/items", tags=["items"])
 
-from ..common import get_db
-
-from .schema import CreateItemRequest, CreateItemResponse
-
-
-item_router = APIRouter(
-    prefix="/items",
-    tags=["item"],
-)
+# Initialize repository and use cases
+repository = InMemoryItemRepository()
+item_usecases = ItemUseCases(repository)
 
 
-@item_router.post("/")
-async def post_item(
-    item: CreateItemRequest, db: Session = Depends(get_db)
-) -> CreateItemResponse:
-    return create_item(item, db)
+@item_router.post("/", response_model=CreateItemResponse)
+async def create_item(item: CreateItemRequest) -> CreateItemResponse:
+    return await item_usecases.create_item(item)
 
 
-@item_router.get("/")
-async def get_items(db: Session = Depends(get_db)):
-    return get_all(db)
+@item_router.get("/", response_model=AllItemsResponse)
+async def get_items() -> AllItemsResponse:
+    return await item_usecases.get_all_items()
