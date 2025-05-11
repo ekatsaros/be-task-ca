@@ -1,9 +1,7 @@
 import pytest
-from typing import Coroutine, Any
 from uuid import UUID
 from ..domain.models import Item
 from ..interfaces.repositories import ItemRepository
-from ..domain.exceptions import ItemAlreadyExistsError
 
 @pytest.mark.asyncio
 class TestInMemoryItemRepository:

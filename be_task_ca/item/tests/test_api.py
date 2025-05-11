@@ -1,11 +1,9 @@
 import pytest
 from decimal import Decimal
 from fastapi.testclient import TestClient
-from ... import app
-from ..domain.models import Item
-from ..schemas import CreateItemRequest, CreateItemResponse
 from fastapi import FastAPI
 from ..api import item_router
+
 
 def get_application() -> FastAPI:
     """Create FastAPI application with all configurations"""
@@ -13,11 +11,13 @@ def get_application() -> FastAPI:
     app.include_router(item_router)
     return app
 
-app = get_application()
+
+test_app = get_application()
+
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(app)
+    return TestClient(test_app)
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ class TestItemAPI:
         data = response.json()
         assert data["name"] == valid_item_payload["name"]
         assert data["description"] == valid_item_payload["description"]
-        # assert Decimal(data["price"]) == Decimal(valid_item_payload["price"])
+        assert round(Decimal(data["price"]), 2) == Decimal(valid_item_payload["price"]), 2
         assert data["quantity"] == valid_item_payload["quantity"]
         assert "id" in data
         # assert "created_at" in data
