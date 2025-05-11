@@ -25,4 +25,5 @@ class AddToCartRequest(BaseModel):
 
 
 class AddToCartResponse(BaseModel):
+    user_id: UUID
     items: List[AddToCartRequest]
