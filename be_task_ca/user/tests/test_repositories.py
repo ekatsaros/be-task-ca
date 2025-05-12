@@ -1,5 +1,5 @@
 import pytest
-from uuid import UUID
+from uuid import UUID, uuid4
 from ..domain.models import User, CartItem
 from ..domain.exceptions import UserNotFoundError, UserAlreadyExistsError
 from ..interfaces.repositories import UserRepository

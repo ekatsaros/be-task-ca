@@ -56,11 +56,10 @@ class UserUseCases:
                 raise UserNotFoundError(f"User with id {user_id} not found")
 
             cart_item = CartItem(
-                user_id=user_id,
                 item_id=request.item_id,
                 quantity=request.quantity
             )
-            user.cart_items.append(cart_item)
+            user.add_to_cart(cart_item.item_id, quantity=request.quantity)
 
             return AddToCartResponse(
                 user_id=user_id,
